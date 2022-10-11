@@ -26,15 +26,22 @@ fn simple_reading_from_stdin() -> Result<(), Box<dyn Error>> {
     // Reading by fields
     reader.seek(og_record_pos)?;
     let mut r_n_f = RecordsAndFields::new(reader);
-    let field_record = r_n_f.field_next().unwrap()?;
+    let field_record = r_n_f.iter_mut().next().unwrap()?;
     println!("{:?}", field_record);
     println!("{:?}", field_record.len());
 
-    let next_field_record = r_n_f.field_next().unwrap()?;
+    let next_field_record = r_n_f.iter_mut().next().unwrap()?;
     println!("{:?}", next_field_record);
     println!("{:?}", next_field_record.len());
 
-    // OK -- this works but isn't the API I was looking for; I want to be able to put this in a `for` loop NEXT
+    // Can use it in a for loop now
+    // Implementing Iter makes sense when you've done it, but can be hard to reason about without consistent practice.
+    // I think it was also harder in this case because there was an added complexity in creating a wrapper struct.
+    for realz in r_n_f.iter_mut() {
+        let realsies = realz?;
+        println!("{:?}", realsies);
+        println!("{:?}", realsies.len());
+    }
 
     Ok(())
 }
@@ -52,25 +59,6 @@ impl<'i, R: io::Read + io::Seek> RecordsAndFields<R> {
         }
     }
 
-    // TODO: Kind of hit a wall with trying to read by field here without
-    // elaborate internals work.
-    fn field_next(&mut self) -> Option<Result<StringRecord, csv::Error>> {
-        // Go through each record, pick out the current field of interest's value
-        // Best way to do this is to track the index of the field
-        let mut stringfield = StringRecord::new();
-        // Probably want to increment after iteration is complete but I was fighting the borrow checker for too long
-        // Apparently I really need to review Iter / IntoIterator trait implementation, like bad.
-        let pos = self.current_field_iteration;
-        let starting_reader_position = self.reader.position().clone();
-        for result in self.iter_mut() {
-            let record = result.ok()?;
-            stringfield.push_field(record.get(pos)?);
-        }
-        self.current_field_iteration += 1;
-        self.reader.seek(starting_reader_position).ok()?;
-        Some(Ok(stringfield))
-    }
-
     fn iter_mut(&'i mut self) -> RNFIter<'i, R> {
         RNFIter(self)
     }
@@ -78,25 +66,19 @@ impl<'i, R: io::Read + io::Seek> RecordsAndFields<R> {
 
 struct RNFIter<'j, R: 'j>(&'j mut RecordsAndFields<R>);
 
-impl<'i, R: io::Read> Iterator for RNFIter<'i, R> {
+impl<'i, R: io::Read + io::Seek> Iterator for RNFIter<'i, R> {
     type Item = Result<StringRecord, csv::Error>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let mut s = StringRecord::new();
-        match self.0.reader.read_record(&mut s) {
-            Ok(true) => Some(Ok(s)),
-            Ok(false) => None,
-            Err(e) => Some(Err(e)),
+        let mut stringfield = StringRecord::new();
+        let field_index = self.0.current_field_iteration;
+        let starting_reader_position = self.0.reader.position().clone();
+        for record in self.0.reader.records() {
+            let unwrapped_record = record.ok()?;
+            stringfield.push_field(unwrapped_record.get(field_index)?);
         }
+        self.0.current_field_iteration += 1;
+        self.0.reader.seek(starting_reader_position).ok()?;
+        Some(Ok(stringfield))
     }
 }
-
-// impl<'i, R: io::Read> IntoIterator for RecordsAndFields<'i, R> {
-//     type Item = &'i Self;
-
-//     type IntoIter = Self;
-
-//     fn into_iter(self) -> Self::IntoIter {
-//         todo!()
-//     }
-// }
