@@ -12,49 +12,68 @@ fn simple_reading_from_stdin() -> Result<(), Box<dyn Error>> {
     let mut v: Vec<u8> = Vec::new();
     io::stdin().read_to_end(&mut v)?;
     let mut reader = ReaderBuilder::new().from_reader(io::Cursor::new(v));
+    reader.records().next(); // skip the header row
+    let og_record_pos = reader.position().clone(); // get the position
+    println!("{:?}", og_record_pos);
+    reader.seek(csv::Position::new())?; // seek back to the beginning
 
     // Reading by records
 
+    let result = reader.records().next().unwrap();
+    let record = result?;
+    println!("{:?}", record.position());
+    println!("{:?}", record);
+    println!("{:?}", record.len());
+
     // for result in reader.records() {
     //     let record = result?;
+    //     println!("{:?}", record.position());
     //     println!("{:?}", record);
-    //     println!("{:?}", record.get(0));
+    //     println!("{:?}", record.len());
     // }
 
     // Reading by fields
-    // let mut r_n_f = RecordsAndFields::new(&mut reader);
-    // let field_record = r_n_f.field_next().unwrap()?;
-    // println!("{:?}", field_record);
-    // println!("{:?}", field_record.get(0));
+    let test_pos = csv::Position::new().set_record(1).to_owned();
+    reader.seek(test_pos)?;
+    let mut r_n_f = RecordsAndFields::new(&mut reader);
+    let field_record = r_n_f.field_next().unwrap()?;
+    println!("{:?}", field_record);
+    println!("{:?}", field_record.len()); // We're closer but we are getting an off by one error, 1 record is being dropped for some reason.
+
+    r_n_f.reader.seek(og_record_pos)?;
+    let next_field_record = r_n_f.field_next().unwrap()?;
+    println!("{:?}", next_field_record);
+    println!("{:?}", next_field_record.len()); // We're closer but we are getting an off by one error, 1 record is being dropped for some reason.
+
     // Problem! The reader can only be read once, so we can't iterate to get the next field if we have to read all records to read the first one...
     // Looks like there is a Seek implementation, so this might just have been a limitation of using io::stdin() directly.
     // I switched to using a Vec<u8> buffer and io::Cursor
 
     // Back to basics:
-    test_flatten(); // flatten can work, and is getting closer to a solution like ndarray
+    // test_flatten(); // flatten can work, and is getting closer to a solution like ndarray
 
-    let all_records: Vec<Result<StringRecord, csv::Error>> = reader.records().collect();
-    let unwrapped_records: Vec<StringRecord> = all_records
-        .iter()
-        .map(|r| {
-            if r.is_err() {
-                StringRecord::new()
-            } else {
-                r.as_ref().ok().unwrap().to_owned()
-            }
-        })
-        .collect();
-    let col1: Vec<&str> = unwrapped_records
-        .iter()
-        .map(|x| x.get(0).unwrap())
-        .collect();
-    println!("{:?}", col1);
+    // let all_records: Vec<Result<StringRecord, csv::Error>> = reader.records().collect();
+    // let unwrapped_records: Vec<StringRecord> = all_records
+    //     .iter()
+    //     .map(|r| {
+    //         if r.is_err() {
+    //             StringRecord::new()
+    //         } else {
+    //             r.as_ref().ok().unwrap().to_owned()
+    //         }
+    //     })
+    //     .collect();
+    // let col1: Vec<&str> = unwrapped_records
+    //     .iter()
+    //     .map(|x| x.get(0).unwrap())
+    //     .collect();
+    // println!("{:?}", col1);
 
-    let col2: Vec<&str> = unwrapped_records
-        .iter()
-        .map(|x| x.get(3).unwrap())
-        .collect();
-    println!("{:?}", col2);
+    // let col2: Vec<&str> = unwrapped_records
+    //     .iter()
+    //     .map(|x| x.get(3).unwrap())
+    //     .collect();
+    // println!("{:?}", col2);
 
     println!("{:?}", reader.headers());
     Ok(())
