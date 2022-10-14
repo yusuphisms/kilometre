@@ -23,7 +23,6 @@ fn main() -> Result<()> {
 
     conn.execute(create_table.as_str(), ())?;
 
-    let row = csv_reader.records().next().unwrap()?;
     let prepared_insert = format!(
         r#"
         INSERT INTO testing ( {} ) VALUES ( {} )
@@ -34,17 +33,21 @@ fn main() -> Result<()> {
 
     let mut prepared_insert = conn.prepare_cached(prepared_insert.as_str())?;
 
-    let vals_string = row
-        .iter()
-        .map(|f| format!("'{}'", f))
-        .collect::<Vec<String>>();
-    let vals = vals_string
-        .iter()
-        .map(String::as_str)
-        .collect::<Vec<&str>>();
-    prepared_insert.execute::<&[&str; 5]>(vals[..].try_into()?)?;
-    // So try_into is nice here, but the length of the columns will be dynamic in the future. So this is kind of a bummer.
-    // I think it will require thinking more about what information would I have at runtime, what info would I need to request, etc.
+    // re-using the prepared statement
+    for record in csv_reader.records() {
+        let row = record?;
+        let vals_string = row
+            .iter()
+            .map(|f| format!("'{}'", f))
+            .collect::<Vec<String>>();
+        let vals = vals_string
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<&str>>();
+        prepared_insert.execute::<&[&str; 5]>(vals[..].try_into()?)?;
+        // So try_into is nice here, but the length of the columns will be dynamic in the future. So this is kind of a bummer.
+        // I think it will require thinking more about what information would I have at runtime, what info would I need to request, etc.
+    }
 
     Ok(())
 }
