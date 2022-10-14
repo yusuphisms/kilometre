@@ -27,12 +27,20 @@ fn main() -> Result<()> {
     let mut stmt = conn.prepare("SELECT * FROM testing")?;
     let mut rows = stmt.query([])?;
 
-    let prepared_insert = r#"
-    INSERT INTO testing ( col1 ) VALUES ( 1 )
-    "#;
-
-    let mut prepared_insert = conn.prepare_cached(prepared_insert)?;
     let row = csv_reader.records().next().unwrap()?;
+    let prepared_insert = format!(
+        r#"
+        INSERT INTO testing ( {} ) VALUES ( {} )
+        "#,
+        headers.join(","),
+        row.iter()
+            .map(|f| format!("'{}'", f))
+            .collect::<Vec<String>>()
+            .join(",")
+    );
+
+    let mut prepared_insert = conn.prepare_cached(prepared_insert.as_str())?;
+
     prepared_insert.execute([])?;
     // prepared_insert.execute([rusqlite::named_params! {
     //     ":cols": headers.join(","),
