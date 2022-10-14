@@ -5,6 +5,9 @@
 		},
 		{
 			"path": "./readcsv"
+		},
+		{
+			"path": "./csvtosql"
 		}
 	],
 	"settings": {}
