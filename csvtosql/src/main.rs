@@ -8,7 +8,7 @@ fn main() -> Result<()> {
     // When importing to SQL for the first time, knowing headers ahead of time is important.
     // Since reading CSVs is tricky, using the csv crate to read and interpret headers vs rows is the right thing to do.
 
-    let conn = Connection::open_in_memory()?;
+    let mut conn = Connection::open_in_memory()?;
 
     let mut csv_reader = ReaderBuilder::new().from_reader(io::stdin());
     let cloned = csv_reader.headers().cloned()?;
@@ -31,10 +31,15 @@ fn main() -> Result<()> {
         ["?"].repeat(headers.len()).join(",")
     );
 
-    let mut prepared_insert = conn.prepare_cached(prepared_insert.as_str())?;
-
     // re-using the prepared statement
+    // Great read on insert performance improvements -- https://stackoverflow.com/questions/1711631/improve-insert-per-second-performance-of-sqlite
+    // let's try adding a transaction
+    let transaction = conn.transaction()?;
+    // oh this is fun and interesting - switch from using conn to using transaction
+    // so much to learn about SQL!
+
     for record in csv_reader.records() {
+        let mut prepared_insert = transaction.prepare_cached(prepared_insert.as_str())?;
         let row = record?;
         let vals_string = row
             .iter()
@@ -48,6 +53,7 @@ fn main() -> Result<()> {
         // So try_into is nice here, but the length of the columns will be dynamic in the future. So this is kind of a bummer.
         // I think it will require thinking more about what information would I have at runtime, what info would I need to request, etc.
     }
+    transaction.commit()?;
 
     Ok(())
 }
